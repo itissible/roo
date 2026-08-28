@@ -365,6 +365,33 @@ class TestRworkbookExcelx < Minitest::Test
     end
   end
 
+  def test_streaming_rows_from_a_prefixed_xml_namespace
+    xlsx = roo_class.new(File.join(TESTDIR, 'prefixed_xml_namespace.xlsx'))
+
+    assert_equal ['Products', 'Second Sheet'], xlsx.sheets
+
+    expected_rows = [
+      ['Title', 'Quantity', 'Created At', 'Note', 'Barcode'],
+      ['Product One', 12, Date.new(2026, 8, 14), 1234567890.0],
+      ['Product Two', 7, Date.new(2026, 8, 14), 'Gift wrapped', 9876543210.0]
+    ]
+
+    rows = []
+    xlsx.each_row_streaming { |row| rows << row.map(&:value) }
+
+    assert_equal expected_rows, rows
+  end
+
+  def test_streaming_rows_skips_a_row_in_a_foreign_xml_namespace
+    xlsx = roo_class.new(File.join(TESTDIR, 'foreign_xml_namespace_row.xlsx'))
+
+    rows = []
+    xlsx.each_row_streaming { |row| rows << row.map(&:value) }
+
+    assert_equal 3, rows.size
+    refute_includes rows.flatten, 'Not a Product row'
+  end
+
   def roo_class
     Roo::Excelx
   end

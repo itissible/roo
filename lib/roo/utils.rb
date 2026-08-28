@@ -5,6 +5,7 @@ module Roo
     extend self
 
     LETTERS = ('A'..'Z').to_a
+    SPREADSHEETML_MAIN_NAMESPACE = 'http://schemas.openxmlformats.org/spreadsheetml/2006/main'
     URI_PARSER = defined?(::URI::RFC2396_PARSER) ? ::URI::RFC2396_PARSER : ::URI::DEFAULT_PARSER
 
     def extract_coordinate(s)
@@ -100,11 +101,23 @@ module Roo
     end
 
     # Yield each element of a given type ('row', 'c', etc.) to caller
+    #
+    # Elements are matched on their local name: a sheet may be written with a namespace prefix on every
+    # element (<x:row>), and Nokogiri::XML::Reader#name keeps that prefix, so such a file used to stream no
+    # rows at all. Reading namespace-blind is what the rest of the package already does - Excelx#sheet_ids
+    # and Excelx::Extractor#doc both call remove_namespaces!. The namespace is still checked, so an element
+    # that only shares the local name - a vendor <extLst><ext><mc:row> - is not taken for a sheet row.
     def each_element(path, elements)
       elements = Array(elements)
-      Nokogiri::XML::Reader(::File.open(path, 'rb'), nil, nil, Nokogiri::XML::ParseOptions::NOBLANKS).each do |node|
-        next unless node.node_type == Nokogiri::XML::Reader::TYPE_ELEMENT && elements.include?(node.name)
-        yield Nokogiri::XML(node.outer_xml).root if block_given?
+      ::File.open(path, 'rb') do |file|
+        Nokogiri::XML::Reader(file, nil, nil, Nokogiri::XML::ParseOptions::NOBLANKS).each do |node|
+          next unless node.node_type == Nokogiri::XML::Reader::TYPE_ELEMENT && elements.include?(node.local_name)
+
+          namespace = node.namespace_uri.to_s
+          next unless namespace.empty? || namespace == SPREADSHEETML_MAIN_NAMESPACE
+
+          yield Nokogiri::XML(node.outer_xml).root if block_given?
+        end
       end
     end
 
