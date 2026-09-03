@@ -392,6 +392,15 @@ class TestRworkbookExcelx < Minitest::Test
     refute_includes rows.flatten, 'Not a Product row'
   end
 
+  def test_streaming_rows_from_a_strict_open_xml_workbook
+    xlsx = roo_class.new(File.join(TESTDIR, 'strict.xlsx'))
+
+    rows = []
+    xlsx.each_row_streaming { |row| rows << row.map(&:value) }
+
+    assert_equal [['Sheet 1']], rows
+  end
+
   def roo_class
     Roo::Excelx
   end

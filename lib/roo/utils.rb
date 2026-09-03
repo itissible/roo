@@ -5,7 +5,12 @@ module Roo
     extend self
 
     LETTERS = ('A'..'Z').to_a
-    SPREADSHEETML_MAIN_NAMESPACE = 'http://schemas.openxmlformats.org/spreadsheetml/2006/main'
+    # The same SpreadsheetML schema is published under two namespaces: ECMA-376 1st edition (Transitional, what
+    # Excel writes by default) and ISO/IEC 29500 (Strict, what Excel writes as "Strict Open XML Spreadsheet").
+    SPREADSHEETML_MAIN_NAMESPACES = [
+      'http://schemas.openxmlformats.org/spreadsheetml/2006/main',
+      'http://purl.oclc.org/ooxml/spreadsheetml/main'
+    ].freeze
     URI_PARSER = defined?(::URI::RFC2396_PARSER) ? ::URI::RFC2396_PARSER : ::URI::DEFAULT_PARSER
 
     def extract_coordinate(s)
@@ -105,8 +110,9 @@ module Roo
     # Elements are matched on their local name: a sheet may be written with a namespace prefix on every
     # element (<x:row>), and Nokogiri::XML::Reader#name keeps that prefix, so such a file used to stream no
     # rows at all. Reading namespace-blind is what the rest of the package already does - Excelx#sheet_ids
-    # and Excelx::Extractor#doc both call remove_namespaces!. The namespace is still checked, so an element
-    # that only shares the local name - a vendor <extLst><ext><mc:row> - is not taken for a sheet row.
+    # and Excelx::Extractor#doc both call remove_namespaces!. The namespace is still checked - Transitional or
+    # Strict SpreadsheetML - so an element that only shares the local name - a vendor <extLst><ext><mc:row> -
+    # is not taken for a sheet row.
     def each_element(path, elements)
       elements = Array(elements)
       ::File.open(path, 'rb') do |file|
@@ -114,7 +120,7 @@ module Roo
           next unless node.node_type == Nokogiri::XML::Reader::TYPE_ELEMENT && elements.include?(node.local_name)
 
           namespace = node.namespace_uri.to_s
-          next unless namespace.empty? || namespace == SPREADSHEETML_MAIN_NAMESPACE
+          next unless namespace.empty? || SPREADSHEETML_MAIN_NAMESPACES.include?(namespace)
 
           yield Nokogiri::XML(node.outer_xml).root if block_given?
         end
