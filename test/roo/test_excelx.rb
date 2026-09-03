@@ -401,6 +401,15 @@ class TestRworkbookExcelx < Minitest::Test
     assert_equal [['Sheet 1']], rows
   end
 
+  def test_streaming_iso_8601_date_cells_from_a_strict_open_xml_workbook
+    xlsx = roo_class.new(File.join(TESTDIR, 'strict_open_xml_dates.xlsx'))
+
+    created_at_values = []
+    xlsx.each_row_streaming(pad_cells: true) { |row| created_at_values << row.last.value }
+
+    assert_equal ['Created At', Date.new(2026, 8, 14), DateTime.new(2026, 8, 14, 10, 30, 0)], created_at_values
+  end
+
   def roo_class
     Roo::Excelx
   end

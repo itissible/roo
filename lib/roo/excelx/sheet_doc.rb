@@ -65,6 +65,8 @@ module Roo
           :string
         when 'inlineStr'
           :inlinestr
+        when 'd'
+          :iso_date
         else
           Excelx::Format.to_type(format)
         end
@@ -147,30 +149,45 @@ module Roo
           value = cell.content
           Excelx::Cell.cell_class(value_type).new(value, formula, style, hyperlink, coordinate)
         when :time, :datetime
-          cell_content = cell.content.to_f
-          # NOTE: A date will be a whole number. A time will have be > 1. And
-          #      in general, a datetime will have decimals. But if the cell is
-          #      using a custom format, it's possible to be interpreted incorrectly.
-          #      cell_content.to_i == cell_content && standard_style?=> :date
-          #
-          #      Should check to see if the format is standard or not. If it's a
-          #      standard format, than it's a date, otherwise, it is a datetime.
-          #      @styles.standard_style?(style_id)
-          #      STANDARD_STYLES.keys.include?(style_id.to_i)
-          cell_type = if cell_content < 1.0
-                        :time
-                      elsif (cell_content - cell_content.floor).abs > 0.000001
-                        :datetime
-                      else
-                        :date
-                      end
-          base_value = cell_type == :date ? base_date : base_timestamp
-          Excelx::Cell.cell_class(cell_type).new(cell_content, formula, excelx_type, style, hyperlink, base_value, coordinate)
+          create_cell_from_serial(cell.content.to_f, formula, excelx_type, style, hyperlink, coordinate)
+        when :iso_date
+          create_cell_from_serial(iso_8601_to_serial(cell.content), formula, excelx_type, style, hyperlink, coordinate)
         when :date
           Excelx::Cell.cell_class(:date).new(cell.content, formula, excelx_type, style, hyperlink, base_date, coordinate)
         else
           Excelx::Cell.cell_class(:number).new(cell.content, formula, excelx_type, style, hyperlink, coordinate)
         end
+      end
+
+      # NOTE: A date will be a whole number. A time will have be > 1. And
+      #      in general, a datetime will have decimals. But if the cell is
+      #      using a custom format, it's possible to be interpreted incorrectly.
+      #      cell_content.to_i == cell_content && standard_style?=> :date
+      #
+      #      Should check to see if the format is standard or not. If it's a
+      #      standard format, than it's a date, otherwise, it is a datetime.
+      #      @styles.standard_style?(style_id)
+      #      STANDARD_STYLES.keys.include?(style_id.to_i)
+      def create_cell_from_serial(serial, formula, excelx_type, style, hyperlink, coordinate)
+        cell_type = if serial < 1.0
+                      :time
+                    elsif (serial - serial.floor).abs > 0.000001
+                      :datetime
+                    else
+                      :date
+                    end
+        base_value = cell_type == :date ? base_date : base_timestamp
+        Excelx::Cell.cell_class(cell_type).new(serial, formula, excelx_type, style, hyperlink, base_value, coordinate)
+      end
+
+      # ISO/IEC 29500 Strict (Excel's "Strict Open XML Spreadsheet") stores a date cell as ISO 8601 text in a
+      # cell typed t="d" - "2026-08-14", "2026-08-14T10:30:00" or "10:30:00" - where Transitional files store
+      # the Excel serial. Converting to the serial lets the same cell classes handle both encodings.
+      def iso_8601_to_serial(content)
+        datetime = ::DateTime.parse(content)
+        return datetime.day_fraction.to_f unless content.match?(/\A\d{4}-\d{2}-\d{2}/)
+
+        (datetime - base_date.to_datetime).to_f
       end
 
       def extract_hyperlinks(relationships)
